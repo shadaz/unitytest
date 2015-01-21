@@ -6,7 +6,7 @@ namespace UnitySampleAssets.Characters.FirstPerson
 {
     [RequireComponent(typeof (CharacterController))]
     [RequireComponent(typeof (AudioSource))]
-    public class FirstPersonController : MonoBehaviour
+	public class FirstPersonController : Photon.MonoBehaviour
     {
 
         //////////////////////// exposed privates ///////////////////////
@@ -49,6 +49,18 @@ namespace UnitySampleAssets.Characters.FirstPerson
         // Use this for initialization
         private void Start()
         {
+
+			if (!photonView.isMine)
+			{ 
+				GetComponentInChildren<Camera>().enabled = false; 
+				// disable the camera of the non-owned Player; 
+				GetComponentInChildren<AudioListener>().enabled = false; 
+				
+				// Disables AudioListener of non-owned Player - prevents multiple AudioListeners from being present in scene. 
+				//GetComponentInChildren<MouseLook>().enabled = false; 
+				GetComponentInChildren<FirstPersonController>().enabled = false; 
+				return;
+			}
             _characterController = GetComponent<CharacterController>();
             _camera = Camera.main;
             _originalCameraPosition = _camera.transform.localPosition;
@@ -63,6 +75,8 @@ namespace UnitySampleAssets.Characters.FirstPerson
         // Update is called once per frame
         private void Update()
         {
+			if (!photonView.isMine)
+				return;
             RotateView();
             // the jump state needs to read here to make sure it is not missed
             if (!_jump)
@@ -84,7 +98,9 @@ namespace UnitySampleAssets.Characters.FirstPerson
         }
 
         private void PlayLandingSound()
-        {
+		{			
+			if (!photonView.isMine)
+			return;
             audio.clip = _landSound;
             audio.Play();
             _nextStep = _stepCycle + .5f;
@@ -92,7 +108,10 @@ namespace UnitySampleAssets.Characters.FirstPerson
 
         private void FixedUpdate()
         {
+			if (!photonView.isMine)
+				return;
             float speed;
+
             GetInput(out speed);
             // always move along the camera forward as it is the direction that it being aimed at
             Vector3 desiredMove = _camera.transform.forward*_input.y + _camera.transform.right*_input.x;
@@ -132,12 +151,16 @@ namespace UnitySampleAssets.Characters.FirstPerson
 
         private void PlayJumpSound()
         {
+			if (!photonView.isMine)
+				return;
             audio.clip = _jumpSound;
             audio.Play();
         }
 
         private void ProgressStepCycle(float speed)
         {
+			if (!photonView.isMine)
+				return;
             if (_characterController.velocity.sqrMagnitude > 0 && (_input.x != 0 || _input.y != 0))
                 _stepCycle += (_characterController.velocity.magnitude + (speed*(_isWalking ? 1f : runstepLenghten)))*
                               Time.fixedDeltaTime;
@@ -151,6 +174,9 @@ namespace UnitySampleAssets.Characters.FirstPerson
 
         private void PlayFootStepAudio()
         {
+			if (!photonView.isMine)
+				return;
+
             if (!_characterController.isGrounded) return;
             // pick & play a random footstep sound from the array,
             // excluding sound at index 0
@@ -164,6 +190,9 @@ namespace UnitySampleAssets.Characters.FirstPerson
 
         private void UpdateCameraPosition(float speed)
         {
+			if (!photonView.isMine)
+				return;
+
             Vector3 newCameraPosition;
             if (!useHeadBob) return;
             if (_characterController.velocity.magnitude > 0 && _characterController.isGrounded)
@@ -186,6 +215,7 @@ namespace UnitySampleAssets.Characters.FirstPerson
 
         private void GetInput(out float speed)
         {
+
             // Read input
             float horizontal = CrossPlatformInputManager.GetAxis("Horizontal");
             float vertical = CrossPlatformInputManager.GetAxis("Vertical");
@@ -215,6 +245,9 @@ namespace UnitySampleAssets.Characters.FirstPerson
 
         private void RotateView()
         {
+			if (!photonView.isMine)
+				return;
+
             Vector2 mouseInput = _mouseLook.Clamped(_yRotation, transform.localEulerAngles.y);
 
             // handle the roation round the x axis on the camera
@@ -227,6 +260,9 @@ namespace UnitySampleAssets.Characters.FirstPerson
 
         private void OnControllerColliderHit(ControllerColliderHit hit)
         {
+			if (!photonView.isMine)
+				return;
+
             Rigidbody body = hit.collider.attachedRigidbody;
             if (body == null || body.isKinematic)
                 return;
@@ -237,5 +273,19 @@ namespace UnitySampleAssets.Characters.FirstPerson
             body.AddForceAtPosition(_characterController.velocity*0.1f, hit.point, ForceMode.Impulse);
 
         }
+
+		void OnPhotonSerializeView(PhotonStream stream, PhotonMessageInfo info)
+		{
+			if (stream.isWriting) 
+						{
+								stream.SendNext (rigidbody.position);
+								stream.SendNext (rigidbody.rotation);
+						}
+						else {
+								rigidbody.position = (Vector3)stream.ReceiveNext ();
+								rigidbody.rotation = (Quaternion)stream.ReceiveNext ();
+			}
+		}
+
     }
 }
